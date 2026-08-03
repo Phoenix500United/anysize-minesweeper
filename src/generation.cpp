@@ -22,10 +22,10 @@ void generation_worker(GenParameters &parameters){
         uint8_t shift = value & 0b11;
         //modulo for speed but does have bias
         uint32_t index = (value >> 2) % parameters.section_size;
-        uint8_t bombCheck = to_underlying(cellflag::Bomb) << shift*2;
-        uint8_t cellCluster = parameters.minefield_section[index];
-        if(!(cellCluster & bombCheck)){
-            cellCluster |= bombCheck;
+        uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
+        uint8_t cell_cluster = parameters.minefield_section[index];
+        if(!(cell_cluster & bomb_check)){
+            cell_cluster |= bomb_check;
             if(!(--parameters.place_count_remaining)){
                 return;
             }
