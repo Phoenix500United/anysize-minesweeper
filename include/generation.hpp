@@ -11,7 +11,7 @@ enum class cellflag : uint8_t{
     Revealed = 2,
 };
 
-constexpr uint8_t to_underlying(cellflag cf){
+static inline constexpr uint8_t to_underlying(cellflag cf){
     return static_cast<uint8_t>(cf);
 }
 
@@ -32,15 +32,15 @@ class MineField
         (to_underlying(cellflag::Bomb) << 4) | 
         (to_underlying(cellflag::Bomb) << 2) |
         (to_underlying(cellflag::Bomb));
-        field = std::vector<uint8_t>(bombValue, width*height);
+        field = std::vector<uint8_t>(w*h, bombValue);
         width = w;
         height = h;
     }
     void generate_empty(size_t w, size_t h){
-        field = std::vector<uint8_t>(0, w*h);
+        field = std::vector<uint8_t>(w*h, 0);
         width = w;
         height = h;
     }
 };
 
-void generate_minefield(MineField &minefield);
+float generate_minefield(MineField &minefield);
