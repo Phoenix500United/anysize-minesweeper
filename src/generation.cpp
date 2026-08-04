@@ -45,7 +45,7 @@ float generate_minefield(MineField &minefield){
 
     }else{
         uint32_t min_thread_size = 50000; //minimum thread size bassically not worth running threads for grid sizes smaller than this
-        uint32_t max_thread_size = UINT32_MAX; //max thread size individual threads are capped at the integer limit
+        uint32_t max_thread_size = UINT32_MAX; //max thread size individual threads are capped at the integer limit because I am using a 32 bit random number for indexing
 
 
         //gets the number of hardware threads
@@ -62,16 +62,40 @@ float generate_minefield(MineField &minefield){
         //adds another thread for every min_thread_size of cells until max_threads_normal is reached 
         //if max_threads_normal is reached then increases the size of each thead until max thread size is reached
         //then it will further increase nthreads
-        
+
         uint32_t nthreads;
+        uint32_t base_size = min_thread_size;
+        uint32_t remainder;
+
+        
         if(size/min_thread_size < max_threads_normal){
-            
             nthreads = max_threads_normal;
             if (size/nthreads > max_thread_size){
-
+                nthreads = size/max_thread_size + 1;
+                base_size = max_thread_size;
+            }else{ 
+                base_size = size/nthreads;
             }
         }else {
-            
+            nthreads = size/min_thread_size;
+            base_size = size/nthreads;
+        }
+        
+        threadParameters.reserve(nthreads);
+        size_t thread_offset = 0;
+        uint32_t remainder = size % nthreads;
+        for(uint32_t i = 0; i < threadParameters.size(); i++){
+            GenParameters parameter;
+            parameter.minefield_section = minefield.field.data() + thread_offset;
+            if(remainder){
+                parameter.section_size = base_size + 1;
+                thread_offset += base_size + 1;
+                remainder--;
+            }else{
+                parameter.section_size = base_size;
+                thread_offset += base_size;
+            }   
+            threadParameters.push_back(parameter);
         }
 
         
