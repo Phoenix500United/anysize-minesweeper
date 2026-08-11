@@ -1,5 +1,6 @@
 #include <thread>
 #include <atomic>
+#include <memory>
 #include <random>
 #include "generation.hpp"
 
@@ -8,16 +9,17 @@ enum class gt : bool {
     REMOVE,
 };
 
+
 struct GenParameters{
     uint8_t* minefield_section;
     uint32_t section_size;
     gt generation_type;
-
     std::mt19937 rng;
-    std::atomic<uint32_t> place_count_remaining;  
 };
 
-void generation_worker(GenParameters &parameters){
+void generation_worker(GenParameters parameters, std::unique_ptr<std::atomic<uint32_t>> &place_count_counter){
+    uint32_t place_count_remaining = place_count_counter->load(std::memory_order_relaxed);
+    int counter = 0;
     while (true)
     {
         uint32_t value = parameters.rng();
@@ -28,25 +30,28 @@ void generation_worker(GenParameters &parameters){
         uint8_t cell_cluster = parameters.minefield_section[index];
         if(!(cell_cluster & bomb_check)){
             cell_cluster |= bomb_check;
-            if(!(--parameters.place_count_remaining)){
-                return;
-            }
         }
+        
+        if(--place_count_remaining == 0){
+            place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+            return;
+        }else if (counter < 64){
+            place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+            counter = 0;
+        }
+        counter++;
     }
 }
 
 struct Thread_Info
 {
-    std::atomic<uint32_t> remaining_place_count;
     std::thread thread;
+    std::unique_ptr<std::atomic<uint32_t>> remaining_place_count;
     uint32_t total_place_count;
 };
 
 
 void start_generating_minefield(MineField &minefield, int density, std::vector<Thread_Info> &info){
-
-
-    
 
     static constexpr uint32_t min_thread_size = 50000; //minimum thread size bassically not worth running threads for grid sizes smaller than this
     static constexpr uint32_t max_thread_size = UINT32_MAX; //max thread size individual threads are capped at the integer limit because I am using a 32 bit random number for indexing
@@ -102,41 +107,36 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
 
     for(uint32_t i = 0; i < nthreads; ++i){
         Thread_Info t_info;
-        GenParameters parameter;
-        parameter.generation_type = generation_type;
-        parameter.minefield_section = minefield.field.data() + thread_offset;
+        GenParameters parameters;
+
+        parameters.generation_type = generation_type;
+        parameters.minefield_section = minefield.field.data() + thread_offset;
+
+        //For the size remainder
         if(remainder){
-            parameter.section_size = base_size + 1;
+            parameters.section_size = base_size + 1;
             thread_offset += base_size + 1;
             remainder--;
         }else{
-            parameter.section_size = base_size;
+            parameters.section_size = base_size;
             thread_offset += base_size;
         }
         
+        //For the amount remainder
         if(gen_remainder){
-            parameter.place_count_remaining = perthread_gen_amount + 1;
+            t_info.total_place_count = perthread_gen_amount + 1;
+            t_info.remaining_place_count = std::make_unique<std::atomic<uint32_t>>(perthread_gen_amount + 1);
             gen_remainder--;
         }else{
-            parameter.place_count_remaining = perthread_gen_amount;
+            t_info.total_place_count = perthread_gen_amount + 1;
+            t_info.remaining_place_count = std::make_unique<std::atomic<uint32_t>>(perthread_gen_amount + 1);;
         }
-        .push_back(std::thread(generation_worker, std::ref(parameter)));
-        thread_parameters.push_back(parameter);
+        t_info.thread = std::thread(generation_worker, parameters, std::ref(t_info.remaining_place_count));
+        info.push_back(t_info);
+        
     }
-
-    info.nthreads_active = nthreads;
 } 
 
-struct ThreadProgress
-{
-    std::vector<float> thread_progress_individual; 
-    float thread_progress_total;
-};
 
-void get_thread_progress(ThreadProgress &thread_progress, Thread_Info t_info){
-    for(size_t i = 0; i < t_info.nthreads_active; ++i){
-        float total_count = static_cast<float> (t_info.thread_parameters[i].)
-        float remaining_count = static_cast<float> (t_info.thread_parameters[i].place_count_remaining)
-        thread_progress.thread_progress_individual[i] = 
-    }
-}
+
+
