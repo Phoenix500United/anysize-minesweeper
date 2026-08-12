@@ -6,13 +6,13 @@
 
 
 
-void generation_worker(GenParameters parameters, std::unique_ptr<std::atomic<uint32_t>> &place_count_counter){
-    uint32_t place_count_remaining = place_count_counter->load(std::memory_order_relaxed);
+void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_count_counter){
+    uint32_t place_count_remaining = place_count_counter.load(std::memory_order_relaxed);
     int counter = 0;
+    std::mt19937 thread_rng(parameters.thread_seed);
     while (true)
     {
-        
-        uint32_t value = parameters.rng();
+        uint32_t value = thread_rng();
         //Where in the byte is the data
         uint8_t shift = value & 0b11;
         //modulo for speed but does have bias
@@ -24,11 +24,11 @@ void generation_worker(GenParameters parameters, std::unique_ptr<std::atomic<uin
             cell_cluster |= bomb_check;
             //counts till there are no bombs left to place
             if(--place_count_remaining == 0){
-                place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+                place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                 return;
             //Batch counter for atomic update
             }else if (++counter < 64){
-                place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+                place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                 counter = 0;
             }
         }
@@ -36,7 +36,7 @@ void generation_worker(GenParameters parameters, std::unique_ptr<std::atomic<uin
     }
 }
 
-void start_generating_minefield(MineField &minefield, int density, std::vector<Thread_Info> &info){
+void start_generating_minefield(MineField &minefield, int density, std::vector<ThreadInfo> &info){
 
     static constexpr uint32_t min_thread_size = 50000; //minimum thread size bassically not worth running threads for grid sizes smaller than this
     static constexpr uint32_t max_thread_size = UINT32_MAX; //max thread size individual threads are capped at the integer limit because I am using a 32 bit random number for indexing
@@ -78,16 +78,22 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
     info.reserve(nthreads);
 
     size_t thread_offset = 0;
-    uint32_t thread_size = size/min_thread_size; 
+    uint32_t thread_size = size/size; 
     uint32_t thread_remainder = size % nthreads;
 
     uint32_t perthread_gen_amount = gen_amount/nthreads;
-    uint32_t gen_remainder = perthread_gen_amount % nthreads;
+    uint32_t gen_remainder = gen_amount % nthreads;
+
+    uint32_t master_seed = std::random_device{}();
+    std::mt19937 master_rng(master_seed);
 
     for(uint32_t i = 0; i < nthreads; ++i){
-        Thread_Info t_info;
+        //specicially to ensure the unque pointer is created on the referenced vector so its not copied
+        info.emplace_back(); 
+        ThreadInfo& t_info = info.back();
         GenParameters parameters;
 
+        parameters.thread_seed = master_rng();
         parameters.generation_type = generation_type;
         parameters.minefield_section = minefield.field.data() + thread_offset;
 
@@ -104,14 +110,13 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
         //For the amount remainder
         if(gen_remainder){
             t_info.total_place_count = perthread_gen_amount + 1;
-            t_info.remaining_place_count = std::make_unique<std::atomic<uint32_t>>(perthread_gen_amount + 1);
+            t_info.remaining_place_count = perthread_gen_amount + 1;
             gen_remainder--;
         }else{
-            t_info.total_place_count = perthread_gen_amount + 1;
-            t_info.remaining_place_count = std::make_unique<std::atomic<uint32_t>>(perthread_gen_amount + 1);;
+            t_info.total_place_count = perthread_gen_amount;
+            t_info.remaining_place_count = perthread_gen_amount;
         }
         t_info.thread = std::thread(generation_worker, parameters, std::ref(t_info.remaining_place_count));
-        info.push_back(t_info);
         
     }
 } 
