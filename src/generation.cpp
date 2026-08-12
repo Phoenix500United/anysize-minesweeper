@@ -1,7 +1,8 @@
 #include <thread>
 #include <atomic>
-#include <memory>
+#include <exception>
 #include <random>
+#include <iostream>
 #include "generation.hpp"
 
 
@@ -19,7 +20,7 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
         //Which byte
         uint32_t index = (value >> 2) % parameters.section_size;
         uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
-        uint8_t cell_cluster = parameters.minefield_section[index];
+        uint8_t &cell_cluster = parameters.minefield_section[index];
         if(!(cell_cluster & bomb_check)){
             cell_cluster |= bomb_check;
             //counts till there are no bombs left to place
@@ -36,7 +37,9 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
     }
 }
 
-void start_generating_minefield(MineField &minefield, int density, std::vector<ThreadInfo> &info){
+void start_generating_minefield(MineField &minefield, int density, size_t width, size_t height, ThreadInfoArray &info, std::atomic<GenProgress> &generating_indicator){
+
+    generating_indicator = (GenProgress::INITILIZING_MINEFIELD);
 
     static constexpr uint32_t min_thread_size = 50000; //minimum thread size bassically not worth running threads for grid sizes smaller than this
     static constexpr uint32_t max_thread_size = UINT32_MAX; //max thread size individual threads are capped at the integer limit because I am using a 32 bit random number for indexing
@@ -48,18 +51,32 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
     }
 
     // size of the grid * number of cells per byte
-    size_t size = minefield.width * minefield.height * 4; 
+    size_t size = width * height; 
 
+    if (width % 2){
+        std::cout << "WARNING: Width not even,  will end up as width -1 due to bit packing requirements";
+        width = width - 1;
+    }
+    if (height % 2){
+        std::cout << "WARNING: Height not even, will end up as height -1 due to bit packing requirements";
+        height = height -1;
+    }
+
+
+    //determines the genreation type and creates the minefield
     gt generation_type;
     size_t gen_amount;
     if (density > 50){
         generation_type = gt::REMOVE;
         gen_amount = (size)*static_cast<float>((100-density))/100.0f;
+        minefield.generate_full(width/2, height/2);
     }else{
         generation_type = gt::PLACE;
         gen_amount = (size)*static_cast<float>(density)/100.0f;
+        minefield.generate_empty(width/2, height/2);
     }
 
+    generating_indicator = GenProgress::LOADING_THREADS;
     //adds another thread for every min_thread_size of cells until max_threads_normal is reached 
     //if max_threads_normal is reached then increases the size of each thead until max thread size is reached
     //then it will further increase nthreads
@@ -75,11 +92,14 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
         nthreads = size/min_thread_size;
     }
     
-    info.reserve(nthreads);
+    info.data = std::make_unique<ThreadInfo[]>(nthreads);
+    info.nthreads = nthreads;
 
     size_t thread_offset = 0;
-    uint32_t thread_size = size/size; 
-    uint32_t thread_remainder = size % nthreads;
+    uint32_t thread_size = size/nthreads; 
+
+    uint32_t bytes_perthred = size/(4*nthreads);
+    uint32_t bytes_remainder = size % (4*nthreads);
 
     uint32_t perthread_gen_amount = gen_amount/nthreads;
     uint32_t gen_remainder = gen_amount % nthreads;
@@ -89,8 +109,7 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
 
     for(uint32_t i = 0; i < nthreads; ++i){
         //specicially to ensure the unque pointer is created on the referenced vector so its not copied
-        info.emplace_back(); 
-        ThreadInfo& t_info = info.back();
+        ThreadInfo& t_info = info[i];
         GenParameters parameters;
 
         parameters.thread_seed = master_rng();
@@ -98,13 +117,13 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
         parameters.minefield_section = minefield.field.data() + thread_offset;
 
         //For the size remainder
-        if(thread_remainder){
-            parameters.section_size = thread_size + 1;
-            thread_offset += thread_size + 1;
-            thread_remainder--;
+        if(bytes_remainder){
+            parameters.section_size = (bytes_perthred + 1);
+            thread_offset += bytes_perthred + 1;
+            bytes_remainder--;
         }else{
-            parameters.section_size = thread_size;
-            thread_offset += thread_size;
+            parameters.section_size = (bytes_perthred);
+            thread_offset += bytes_perthred;
         }
         
         //For the amount remainder
@@ -119,6 +138,7 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
         t_info.thread = std::thread(generation_worker, parameters, std::ref(t_info.remaining_place_count));
         
     }
+    generating_indicator = GenProgress::DONE;
 } 
 
 

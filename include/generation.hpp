@@ -1,6 +1,10 @@
 #pragma once
 #include <vector>
 #include <cstdint>
+#include <thread>
+#include <atomic>
+#include <memory>
+
 
 
 
@@ -15,18 +19,37 @@ static inline constexpr uint8_t to_underlying(CellFlag cf){
     return static_cast<uint8_t>(cf);
 }
 
-struct ThreadInfo
-{
+struct ThreadInfo{
+
     std::thread thread;
     std::atomic<uint32_t> remaining_place_count;
     uint32_t total_place_count;
+}; 
+
+struct ThreadInfoArray {
+    std::unique_ptr<ThreadInfo[]> data;
+    size_t nthreads;
+
+    ThreadInfo& operator[](size_t i) {
+        return data[i];
+    }
+
+    const ThreadInfo& operator[](size_t i) const {
+        return data[i];
+    }
 };
+
 
 enum class gt : bool {
     PLACE,
     REMOVE,
 };
 
+enum class GenProgress : uint8_t {
+    INITILIZING_MINEFIELD,
+    LOADING_THREADS,
+    DONE
+};
 
 struct GenParameters{
     uint8_t* minefield_section;
@@ -42,9 +65,6 @@ class MineField
     size_t width;
     size_t height;
     std::vector<uint8_t> field;
-    void insert_bomb(size_t x, size_t y){
-        field[y*width + x];
-    }
 
     void generate_full(size_t w, size_t h){
         constexpr uint8_t bombValue = 
@@ -63,4 +83,4 @@ class MineField
     }
 };
 
-float generate_minefield(MineField &minefield);
+void start_generating_minefield(MineField &minefield, int density, size_t width, size_t height, ThreadInfoArray &info, std::atomic<GenProgress> &generating_indicator);

@@ -1,0 +1,39 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "linux-debug",
+            "displayName": "Linux Debug",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-debug",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "/usr/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-release",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "/usr/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux-mingw-release",
+            "displayName": "Linux MinGW Release",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-mingw-release",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "/usr/bin/x86_64-w64-mingw32-gcc",
+                "CMAKE_CXX_COMPILER": "/usr/bin/x86_64-w64-mingw32-g++",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_SYSTEM_NAME": "Windows"
+            }
+        }
+    ]
+}
