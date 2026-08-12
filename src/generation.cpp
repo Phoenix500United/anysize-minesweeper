@@ -4,52 +4,37 @@
 #include <random>
 #include "generation.hpp"
 
-enum class gt : bool {
-    PLACE,
-    REMOVE,
-};
 
-
-struct GenParameters{
-    uint8_t* minefield_section;
-    uint32_t section_size;
-    gt generation_type;
-    std::mt19937 rng;
-};
 
 void generation_worker(GenParameters parameters, std::unique_ptr<std::atomic<uint32_t>> &place_count_counter){
     uint32_t place_count_remaining = place_count_counter->load(std::memory_order_relaxed);
     int counter = 0;
     while (true)
     {
+        
         uint32_t value = parameters.rng();
+        //Where in the byte is the data
         uint8_t shift = value & 0b11;
         //modulo for speed but does have bias
+        //Which byte
         uint32_t index = (value >> 2) % parameters.section_size;
         uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
         uint8_t cell_cluster = parameters.minefield_section[index];
         if(!(cell_cluster & bomb_check)){
             cell_cluster |= bomb_check;
+            //counts till there are no bombs left to place
+            if(--place_count_remaining == 0){
+                place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+                return;
+            //Batch counter for atomic update
+            }else if (++counter < 64){
+                place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
+                counter = 0;
+            }
         }
-        
-        if(--place_count_remaining == 0){
-            place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
-            return;
-        }else if (counter < 64){
-            place_count_counter->store(place_count_remaining, std::memory_order_relaxed);
-            counter = 0;
-        }
-        counter++;
+
     }
 }
-
-struct Thread_Info
-{
-    std::thread thread;
-    std::unique_ptr<std::atomic<uint32_t>> remaining_place_count;
-    uint32_t total_place_count;
-};
-
 
 void start_generating_minefield(MineField &minefield, int density, std::vector<Thread_Info> &info){
 
@@ -79,29 +64,23 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
     //if max_threads_normal is reached then increases the size of each thead until max thread size is reached
     //then it will further increase nthreads
 
-    uint32_t nthreads;
-    uint32_t base_size = min_thread_size;
-    uint32_t remainder;
-
+    uint32_t nthreads = 1; //number of threads
     
-    
-    if(size/min_thread_size < max_threads_normal){
+    if(size/min_thread_size >= max_threads_normal){
         nthreads = max_threads_normal;
         if (size/nthreads > max_thread_size){
             nthreads = size/max_thread_size + 1;
-            base_size = max_thread_size;
-        }else{ 
-            base_size = size/nthreads;
         }
-    }else {
+    }else if(size > min_thread_size) {
         nthreads = size/min_thread_size;
-        base_size = size/nthreads;
     }
     
     info.reserve(nthreads);
 
     size_t thread_offset = 0;
-    uint32_t remainder = size % nthreads;
+    uint32_t thread_size = size/min_thread_size; 
+    uint32_t thread_remainder = size % nthreads;
+
     uint32_t perthread_gen_amount = gen_amount/nthreads;
     uint32_t gen_remainder = perthread_gen_amount % nthreads;
 
@@ -113,13 +92,13 @@ void start_generating_minefield(MineField &minefield, int density, std::vector<T
         parameters.minefield_section = minefield.field.data() + thread_offset;
 
         //For the size remainder
-        if(remainder){
-            parameters.section_size = base_size + 1;
-            thread_offset += base_size + 1;
-            remainder--;
+        if(thread_remainder){
+            parameters.section_size = thread_size + 1;
+            thread_offset += thread_size + 1;
+            thread_remainder--;
         }else{
-            parameters.section_size = base_size;
-            thread_offset += base_size;
+            parameters.section_size = thread_size;
+            thread_offset += thread_size;
         }
         
         //For the amount remainder

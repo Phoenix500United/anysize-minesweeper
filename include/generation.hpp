@@ -15,6 +15,26 @@ static inline constexpr uint8_t to_underlying(CellFlag cf){
     return static_cast<uint8_t>(cf);
 }
 
+struct Thread_Info
+{
+    std::thread thread;
+    std::unique_ptr<std::atomic<uint32_t>> remaining_place_count;
+    uint32_t total_place_count;
+};
+
+enum class gt : bool {
+    PLACE,
+    REMOVE,
+};
+
+
+struct GenParameters{
+    uint8_t* minefield_section;
+    uint32_t section_size;
+    gt generation_type;
+    std::mt19937 rng;
+};
+
 class MineField
 {   
     
