@@ -11,29 +11,55 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
     uint32_t place_count_remaining = place_count_counter.load(std::memory_order_relaxed);
     int counter = 0;
     std::mt19937 thread_rng(parameters.thread_seed);
-    while (true)
-    {
-        uint32_t value = thread_rng();
-        //Where in the byte is the data
-        uint8_t shift = value & 0b11;
-        //modulo for speed but does have bias
-        //Which byte
-        uint32_t index = (value >> 2) % parameters.section_size;
-        uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
-        uint8_t &cell_cluster = parameters.minefield_section[index];
-        if(!(cell_cluster & bomb_check)){
-            cell_cluster |= bomb_check;
-            //counts till there are no bombs left to place
-            if(--place_count_remaining == 0){
-                place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
-                return;
-            //Batch counter for atomic update
-            }else if (++counter < 64){
-                place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
-                counter = 0;
+    if (parameters.generation_type == gt::PLACE) {
+        while (true){
+            uint32_t value = thread_rng();
+            //Where in the byte is the data
+            uint8_t shift = value & 0b11;
+            //modulo for speed but does have bias
+            //Which byte
+            uint32_t index = (value >> 2) % parameters.section_size;
+            uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
+            uint8_t &cell_cluster = parameters.minefield_section[index];
+            if(!(cell_cluster & bomb_check)){
+                cell_cluster |= bomb_check; //places a bomb
+                //counts till there are no bombs left to place
+                if(--place_count_remaining == 0){
+                    place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
+                    return;
+                //Batch counter for atomic update
+                }else if (++counter < 64){
+                    place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
+                    counter = 0;
+                }
             }
-        }
 
+        }
+    } else{
+        while (true){
+            uint32_t value = thread_rng();
+            //Where in the byte is the data
+            uint8_t shift = value & 0b11;
+            //modulo for speed but does have bias
+            //Which byte
+            uint32_t index = (value >> 2) % parameters.section_size;
+            uint8_t bomb_check = to_underlying(CellFlag::Bomb) << shift*2;
+            uint8_t &cell_cluster = parameters.minefield_section[index];
+
+            if((cell_cluster & bomb_check)){
+                cell_cluster ^= bomb_check; //removes a bomb
+                //counts till there are no bombs left to remove
+                if(--place_count_remaining == 0){
+                    place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
+                    return;
+                //Batch counter for atomic update
+                }else if (++counter < 64){
+                    place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
+                    counter = 0;
+                }
+            }
+
+        }
     }
 }
 

@@ -43,7 +43,7 @@ int main()
     std::cout << "Generating...\n";
 
     timer.start_timer();
-    std::thread start_gen_thread(start_generating_minefield, std::ref(mf), 20, 5000, 5000, std::ref(ti), std::ref(generation_flag));
+    std::thread start_gen_thread(start_generating_minefield, std::ref(mf), density, width, height, std::ref(ti), std::ref(generation_flag));
     start_gen_thread.join();
 
     for (size_t i = 0; i < ti.nthreads; ++i) {
