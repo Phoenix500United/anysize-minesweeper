@@ -4,6 +4,8 @@
 #include <random>
 #include <iostream>
 #include "generation.hpp"
+#include <cstdint>
+
 
 
 
@@ -28,7 +30,7 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
                     place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                     return;
                 //Batch counter for atomic update
-                }else if (++counter < 64){
+                }else if (++counter >= 64){
                     place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                     counter = 0;
                 }
@@ -53,7 +55,7 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
                     place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                     return;
                 //Batch counter for atomic update
-                }else if (++counter < 64){
+                }else if (++counter >= 64){
                     place_count_counter.store(place_count_remaining, std::memory_order_relaxed);
                     counter = 0;
                 }

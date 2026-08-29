@@ -9,10 +9,10 @@
 
 
 enum class CellFlag : uint8_t{
-    Bomb = 1,
-    Flag = 3, 
     Unrevealed = 0,
-    Revealed = 2,
+    Revealed = 1,
+    Bomb = 2,
+    Flag = 3, 
 };
 
 static inline constexpr uint8_t to_underlying(CellFlag cf){

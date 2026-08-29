@@ -1,0 +1,61 @@
+#version 430 core 
+layout(local_size_x = 16, local_size_y = 16)
+
+(binding = 0) uniform usampler2D packed_minefield_chunk
+layout(r8ui, binding = 0) writeonly uniform uimage2D unpacked_minefield_chunk;
+
+
+const uint unrevealed = 0;
+const uint revealed = 1;
+const uint bomb = 2;
+const uint flag = 3; 
+
+//basically my version of texelFetch that can index a bit banged texture
+uint cellFetch(usampler2D grid, ivec2 grid_index){
+
+    //Gets the sub byte x and y 
+    ivec2 internal_byte_index = global_index & ivec2(1, 1);
+
+    //Calculates the shift
+    int shift = (internal_byte_index.y << 1u | internal_byte_index.x) << 1u;
+
+    //Gets the global byte index
+    ivec2 global_byte_index = global_index >> ivec2(1, 1);
+
+    //Gets the byte
+    uint byte = texelFetch(grid, global_byte_index, 0).r;
+
+    //returns the cell value
+    return byte >> shift & 3u;
+}
+
+
+void main(){
+    ivec2 output_index = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 global_index = output_index + ivec2(1,1)
+    uint value = cellFetch(packed_minefield_chunk , global_index);
+    
+    
+    // 0 (nothing) 0 (revealed) 0 (bomb) 0(flag) [0000] (value) 
+    uint output_value = 0;
+
+    //I am treating flag and bomb both as cases where a bomb exists
+    //flaged non bombs are a state I am going to have to keep elsewhere
+    if(value < bomb){  
+        for (int y = -1; y < 2; ++y){
+            for(int x = -1; x < 2; ++x){
+                output_value += uint(cellFetch(packed_minefield_chunk, global_index + ivec2(x,y)) == bomb);
+            }
+        }
+        //stores teh revealed or not bit
+        //I am specifically calculating the value on unrevealed cells so that 
+        //I can do a quick reveal and reveal the whole screen 
+        //(might make a more effiecient shader later that doesn't do this)
+        output_value &= value << 7;
+    }else{
+        //stores the flag/bomb 
+        //because I am treating all flags as bombs I can do this as one opperation
+        output_value &= value << 6;
+    }
+    imageStore(unpacked_minefield_chunk, output_index, uvec4(output_value, 0u, 0u,0u));
+}
