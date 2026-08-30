@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.15) 
+
+add_compile_definitions(GRAPHICS_API_OPENGL_43)
 add_subdirectory(thirdparty/raylib SYSTEM)
 
 project("anysize minesweeper")
