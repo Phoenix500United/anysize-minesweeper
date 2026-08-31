@@ -16,7 +16,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(minesweeper "src/main.cpp" "src/generation.cpp") 
+add_executable(minesweeper "src/main.cpp" "src/minefield.cpp") 
 
 target_link_libraries(minesweeper PRIVATE raylib)
 target_include_directories(minesweeper PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
