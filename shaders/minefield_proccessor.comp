@@ -5,7 +5,7 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1)
 layout(r8ui, binding = 0) writeonly uniform uimage2DArray unpacked_minefield_chunk;
 
 
-layout(std430, binding = 0) buffer unpacking_data{
+layout(std430, binding = 0) restrict readonly buffer unpacking_data{
     int output_layers[];
 }
 
