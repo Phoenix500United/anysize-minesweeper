@@ -25,10 +25,15 @@ out vec2 frag_uv;
 
 void main(){
     frag_uv = vertices[gl_VertexID] 
+
+    //scales verticies
     vec2 chunk_scale = vec2(cell_size * chunk_size);
     vec2 vertex = frag_uv *  chunk_scale;
+
+    //translates verticies
     vertex = vertex + vec2(chunk_pos[gl_InstanceID]) * chunk_scale;
     vertex += camera;
     
+    //projects verticies
     gl_Position = projection * vec4(vertex, 0, 1);
 }
