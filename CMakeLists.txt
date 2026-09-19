@@ -30,5 +30,5 @@ target_compile_definitions(minesweeper PRIVATE
     $<$<CONFIG:Debug>:RESOURCES_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/resources/\">
     $<$<CONFIG:Debug>:SHADER_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/shaders/\">
     $<$<CONFIG:Release>:RESOURCES_PATH=\"resources/\">
-     $<$<CONFIG:Release>:SHADER_PATH=\"shaders/\">
+    $<$<CONFIG:Release>:SHADER_PATH=\"shaders/\">
 )

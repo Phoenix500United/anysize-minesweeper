@@ -3,7 +3,7 @@
 #include <exception>
 #include <random>
 #include <iostream>
-#include "generation.hpp"
+#include "minefield.hpp"
 #include <cstdint>
 
 
@@ -142,7 +142,7 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
 
         parameters.thread_seed = master_rng();
         parameters.generation_type = generation_type;
-        parameters.minefield_section = minefield.field.data() + thread_offset;
+        parameters.minefield_section = minefield.data(thread_offset);
 
         //For the size remainder
         if(bytes_remainder){

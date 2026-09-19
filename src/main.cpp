@@ -1,4 +1,4 @@
-#include "generation.hpp"
+#include "minefield.hpp"
 #include <ctime>
 #include <chrono>
 #include <thread>

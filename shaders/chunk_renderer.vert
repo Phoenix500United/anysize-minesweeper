@@ -24,7 +24,7 @@ const vec2 vertices[6] = vec2[](
 out vec2 frag_uv;
 
 void main(){
-    frag_uv = vertices[gl_VertexID] 
+    frag_uv = vertices[gl_VertexID]; 
 
     //scales verticies
     vec2 chunk_scale = vec2(cell_size * chunk_size);
