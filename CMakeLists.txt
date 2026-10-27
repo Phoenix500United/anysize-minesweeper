@@ -14,7 +14,8 @@ if(MINGW)
     add_link_options(-Wl,-Bstatic,--whole-archive -lpthread -Wl,--no-whole-archive)
 endif()
 
-option(BYTIFY_GENERATE_SHADERS "Generate shaders.hpp using bytify" OFF)
+option(GENERATE_SHADERS "Generate shaders.hpp using bytify" OFF)
+message(STATUS "GENERATE_SHADERS = ${GENERATE_SHADERS}")
 
 set(CMAKE_CXX_STANDARD 20)
 

@@ -55,15 +55,6 @@ int main()
     std::thread start_gen_thread(start_generating_minefield, std::ref(mf), density, width, height, std::ref(ti), std::ref(generation_flag));
     start_gen_thread.join();
     
-    
-    InitWindow(1024, 1024, "anysize");
-    std::cout << "COMPILING RENDERER" << std::endl;
-    Shader chunk_renderer = LoadShaderFromMemory(chunk_renderer_vert, chunk_renderer_frag);
-
-    std::cout << "COMPILING PROCCESSOR" << std::endl;
-    GLuint temp = rlLoadShader(minefield_proccessor_optomized_comp, RL_COMPUTE_SHADER);
-    GLuint minefield_proccessor = rlLoadShaderProgramCompute(temp); 
-    
     //mf.initilize_chunk_interpretation(128, 128, )
 
     for (size_t i = 0; i < ti.nthreads; ++i) {
@@ -73,7 +64,13 @@ int main()
     }
     std::cout << "TIME: " << timer.get_time() << "ms" << std::endl;
 
+    InitWindow(1024, 1024, "anysize");
+    std::cout << "COMPILING RENDERER" << std::endl;
+    Shader chunk_renderer = LoadShaderFromMemory(chunk_renderer_vert, chunk_renderer_frag);
 
+    std::cout << "COMPILING PROCCESSOR" << std::endl;
+    GLuint temp = rlLoadShader(minefield_proccessor_optomized_comp, RL_COMPUTE_SHADER);
+    GLuint minefield_proccessor = rlLoadShaderProgramCompute(temp); 
 
     return 0;
 }
