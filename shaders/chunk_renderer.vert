@@ -2,7 +2,7 @@
 
 layout (std430, binding = 1) readonly buffer render_location{
     uvec2 chunk_pos[];
-}
+};
 
 layout (std140, binding = 0) uniform screen_data {
     mat4 projection; 
@@ -22,6 +22,7 @@ const vec2 vertices[6] = vec2[](
 );
 
 out vec2 frag_uv;
+flat out uint InstanceID;
 
 void main(){
     frag_uv = vertices[gl_VertexID]; 
@@ -31,7 +32,8 @@ void main(){
     vec2 vertex = frag_uv *  chunk_scale;
 
     //translates verticies
-    vertex = vertex + vec2(chunk_pos[gl_InstanceID]) * chunk_scale;
+    InstanceID = gl_InstanceID;
+    vertex = vertex + vec2(chunk_pos[InstanceID]) * chunk_scale;
     vertex += camera;
     
     //projects verticies

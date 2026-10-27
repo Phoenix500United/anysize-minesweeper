@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15) 
 
-add_compile_definitions(GRAPHICS_API_OPENGL_43)
+set(OPENGL_VERSION "4.3" CACHE STRING "" FORCE)
+set(CUSTOMIZE_BUILD ON CACHE BOOL "" FORCE)
 add_subdirectory(thirdparty/raylib SYSTEM)
 
 project("anysize minesweeper")
@@ -13,22 +14,45 @@ if(MINGW)
     add_link_options(-Wl,-Bstatic,--whole-archive -lpthread -Wl,--no-whole-archive)
 endif()
 
+option(BYTIFY_GENERATE_SHADERS "Generate shaders.hpp using bytify" OFF)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 add_executable(minesweeper "src/main.cpp" "src/minefield.cpp") 
 
+if(GENERATE_SHADERS)
+    add_custom_command(
+        OUTPUT ${CMAKE_SOURCE_DIR}/shaders/shaders.hpp
+        COMMAND ${CMAKE_SOURCE_DIR}/bytify
+        -or ${CMAKE_SOURCE_DIR}/shaders/shaders.hpp 
+        -is ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.vert 
+        -is ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.frag 
+        -is ${CMAKE_SOURCE_DIR}/shaders/minefield_proccessor_optomized.comp
+        DEPENDS 
+            ${CMAKE_SOURCE_DIR}/bytify 
+            ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.vert
+            ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.frag 
+            ${CMAKE_SOURCE_DIR}/shaders/minefield_proccessor_optomized.comp
+        COMMENT "Generating Shaders"
+        VERBATIM
+    )
+
+    add_custom_target(generate_shaders
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.hpp
+    )
+
+    add_dependencies(minesweeper generate_shaders)
+endif()
+
+target_include_directories(minesweeper PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/ 
+    ${CMAKE_CURRENT_SOURCE_DIR}/textures/ 
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders
+)
+
 target_link_libraries(minesweeper PRIVATE raylib)
-target_include_directories(minesweeper PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
 
 target_compile_options(minesweeper PRIVATE
     $<$<CONFIG:Debug>:-Wall -Wextra -g -O0>
     $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
 ) 
-
-target_compile_definitions(minesweeper PRIVATE
-    $<$<CONFIG:Debug>:RESOURCES_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/resources/\">
-    $<$<CONFIG:Debug>:SHADER_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/shaders/\">
-    $<$<CONFIG:Release>:RESOURCES_PATH=\"resources/\">
-    $<$<CONFIG:Release>:SHADER_PATH=\"shaders/\">
-)

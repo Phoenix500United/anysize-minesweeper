@@ -97,11 +97,11 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
     if (density > 50){
         generation_type = gt::REMOVE;
         gen_amount = (size)*static_cast<float>((100-density))/100.0f;
-        minefield.generate_full(width/2, height/2);
+        minefield.generate_full();
     }else{
         generation_type = gt::PLACE;
         gen_amount = (size)*static_cast<float>(density)/100.0f;
-        minefield.generate_empty(width/2, height/2);
+        minefield.generate_empty();
     }
 
     generating_indicator = GenProgress::LOADING_THREADS;
@@ -124,7 +124,6 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
     info.nthreads = nthreads;
 
     size_t thread_offset = 0;
-    uint32_t thread_size = size/nthreads; 
 
     uint32_t bytes_perthred = size/(4*nthreads);
     uint32_t bytes_remainder = size % (4*nthreads);

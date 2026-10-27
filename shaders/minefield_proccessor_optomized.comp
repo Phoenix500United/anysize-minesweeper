@@ -1,0 +1,84 @@
+#version 430 core 
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1)
+
+layout(binding = 0) uniform usampler2DArray packed_minefield_chunk;
+layout(r8ui, binding = 0) writeonly uniform uimage2DArray unpacked_minefield_chunk;
+
+
+layout(std430, binding = 0) restrict readonly buffer unpacking_data{
+    int output_layers[];
+};
+
+const uint unrevealed = 0;
+const uint revealed = 1;
+const uint bomb = 2;
+const uint flag = 3; 
+
+
+uint bomb_check(uint byte, ivec2 IBI){
+    uint shift = (IBI.y << 1u | IBI.x) << 1u;
+    return ((byte >> shift) & 3u) >> 1u;
+}
+
+
+// Internal Byte Cell Layout
+// A(00) B(00) C(00) D(00)
+//   ___ ___
+//  |   |   |
+//  | C | D |
+//  |___|___|
+//  |   |   |
+//  | A | B |
+//  |___|___|
+//
+// Keeps internal byte layout inline with standard opengl 
+// texture bottom left 0,0 layout
+
+void main(){
+    ivec2 output_index = gl_GlobalInvocationID.xy;
+    //accounts for the padding around the edge
+    ivec2 index = output_index + 2;
+
+    int layer = gl_GlobalInvocationID.z; 
+
+    //IBI is internal_byte_index I just cut it down to reduce length
+    ivec2 IBI = index & ivec2(1, 1);
+    ivec2 center_byte_index = global_index >> ivec2(1, 1);
+    int shift = (IBI.y << 1u | IBI.x) << 1u;
+    uint center_byte = texelFetch(grid, ivec3(center_byte_index, layer), 0).r;
+
+    // 0 (nothing) 0 (revealed) 0 (bomb) 0(flag) [0000] (value) 
+    uint output_value = 0;
+    
+    uint cell = (center_byte >> shift & 3u);
+    
+    if(!(cell >> 1u)){  
+        ivec2 corner_byte_index = center_byte + 2 * IBI - 1;
+        ivec2 x_byte_index = ivec2(corner_byte.x, center_byte.y);
+        ivec2 y_byte_index = ivec2(center_byte.x, corner_byte.y);
+
+        uint corner_byte = texelFetch(grid, ivec3(corner_byte_index, layer), 0).r;
+        uint x_byte = texelFetch(grid, ivec3(horozontal_byte_index, layer), 0).r;
+        uint y_byte = texelFetch(grid, ivec3(horozontal_byte_index, layer), 0).r;
+        
+        ivec2 flipped_IBI = IBI ^ ivec2(1);
+
+        //Sums the value of surounding bombs
+        output_value += bomb_check(corner_byte, flipped_IBI);
+        output_value += bomb_check(x_byte, ivec2(flipped_IBI.x, 0));
+        output_value += bomb_check(x_byte, ivec2(flipped_IBI.x, 1));
+        output_value += bomb_check(y_byte, ivec2(0, flipped_IBI.y));
+        output_value += bomb_check(y_byte, ivec2(1, flipped_IBI.y));
+        output_value += bomb_check(center_byte, flipped_IBI);
+        output_value += bomb_check(center_byte, ivec2(IBI.x, flipped_IBI.y));
+        output_value += bomb_check(center_byte, ivec2(flipped_IBI.x, IBI.y));
+
+        //Adds the reveal value
+        output_value &= value << 7;
+    }else{
+        //stores the flag/bomb 
+        //because I am treating all flags as bombs I can do this as one opperation
+        output_value &= value << 6;
+    }
+    imageStore(unpacked_minefield_chunk, ivec3(output_index.xy, output_layers[layer]), uvec4(output_value, 0u, 0u,0u));
+}

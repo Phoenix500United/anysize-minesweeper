@@ -3,9 +3,10 @@
 out vec4 Frag_color;
 
 in vec2 frag_uv;
+flat in uint InstanceID;
 
-(binding = 1) uniform usampler2DArray unpacked_minefield_chunk
-(binding = 2) uniform sampler2D minesweeper_texture_atlas;
+layout (binding = 1) uniform usampler2DArray unpacked_minefield_chunk;
+layout (binding = 2) uniform sampler2D minesweeper_texture_atlas;
 
 layout (std140, binding = 0) uniform screen_data {
     mat4 projection; 
@@ -14,9 +15,9 @@ layout (std140, binding = 0) uniform screen_data {
     vec2 camera;
 };
 
-(binding = 3) uniform int mode;
+layout (location = 0) uniform int mode;
 
-const float num_textures = 14.0
+const float num_textures = 14.0;
 const uint unrevealed_offset = 9;
 const uint bomb_offset = 11;
 
@@ -34,7 +35,7 @@ void main(){
 
     ivec2 cell = ivec2(floor(scaled_uv));
     vec2 uv = fract(scaled_uv);
-    uint cell_value = texelFetch(unpacked_minefield_chunk, vec3(cell, gl_InstanceID), 0).r; 
+    uint cell_value = texelFetch(unpacked_minefield_chunk, ivec3(cell, InstanceID), 0).r; 
 
     float texture_offset = 0.0;
 
@@ -45,7 +46,7 @@ void main(){
         uint is_revealed = (cell_value >> revealed_shift) & 1u;
         uint is_flag = (cell_value >> flag_shift) & 1u;
         uint value = (cell_value & value_and);
-        float texture_offset = float(value * is_revealed + (unrevealed_offset + is_flag) * (1u - is_revealed));
+        texture_offset = float(value * is_revealed + (unrevealed_offset + is_flag) * (1u - is_revealed));
 
     }else if(mode == GAME_OVER){
 
@@ -55,20 +56,20 @@ void main(){
 
         uint is_revealed = (cell_value >> revealed_shift) & 1u;
         uint is_flag = (cell_value >> flag_shift) & 1u;
-        uint is_bomb = (cell_value >> bomb_shift) & iu;
+        uint is_bomb = (cell_value >> bomb_shift) & 1u;
         uint value = (cell_value & value_and);
-        float texture_offset = float(value * is_revealed + (unrevealed_offset + is_flag) * (1u - is_revealed));
-        float texture_offset = texture_offset * float(1u - is_bomb) + float(is_bomb * bomb_offset);
+        texture_offset = float(value * is_revealed + (unrevealed_offset + is_flag) * (1u - is_revealed));
+        texture_offset = texture_offset * float(1u - is_bomb) + float(is_bomb * bomb_offset);
         
     }else {
         //Revealed only cares about bomb and value
 
-        uint is_bomb = (cell_value >> bomb_shift_shift) & 1u;
+        uint is_bomb = (cell_value >> bomb_shift) & 1u;
         uint value = (cell_value & value_and);
-        float texture_offset = float(value * (1u - is_bomb) + (bomb_offset + is_bomb) * (is_bomb));
+        texture_offset = float(value * (1u - is_bomb) + (bomb_offset + is_bomb) * (is_bomb));
 
     }
 
-    vec2 texture_uv = vec2(uv.x, (uv.y + texture_offset)/num_textures)
+    vec2 texture_uv = vec2(uv.x, (uv.y + texture_offset)/num_textures);
     Frag_color = texture(minesweeper_texture_atlas, texture_uv);
 }
