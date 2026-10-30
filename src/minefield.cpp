@@ -5,6 +5,7 @@
 #include <iostream>
 #include "minefield.hpp"
 #include <cstdint>
+#include <cassert>
 
 
 
@@ -65,7 +66,7 @@ void generation_worker(GenParameters parameters, std::atomic<uint32_t> &place_co
     }
 }
 
-void start_generating_minefield(MineField &minefield, int density, size_t width, size_t height, ThreadInfoArray &info, std::atomic<GenProgress> &generating_indicator){
+void start_generating_minefield(MineField &minefield, ThreadInfoArray &info, std::atomic<GenProgress> &generating_indicator){
 
     generating_indicator = (GenProgress::INITILIZING_MINEFIELD);
 
@@ -78,30 +79,14 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
         max_threads_normal = 1; //if max threads fails set max threads to 1
     }
 
-    // size of the grid * number of cells per byte
-    size_t size = width * height; 
-
-    if (width % 2){
-        std::cout << "WARNING: Width not even,  will end up as width -1 due to bit packing requirements";
-        width = width - 1;
-    }
-    if (height % 2){
-        std::cout << "WARNING: Height not even, will end up as height -1 due to bit packing requirements";
-        height = height -1;
-    }
-
 
     //determines the genreation type and creates the minefield
     gt generation_type;
-    size_t gen_amount;
-    if (density > 50){
+    size_t gen_amount = static_cast<size_t>(static_cast<float>(minefield.size) * minefield.density);
+    if (minefield.density > 0.5){
         generation_type = gt::REMOVE;
-        gen_amount = (size)*static_cast<float>((100-density))/100.0f;
-        minefield.generate_full();
     }else{
         generation_type = gt::PLACE;
-        gen_amount = (size)*static_cast<float>(density)/100.0f;
-        minefield.generate_empty();
     }
 
     generating_indicator = GenProgress::LOADING_THREADS;
@@ -111,13 +96,13 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
 
     uint32_t nthreads = 1; //number of threads
     
-    if(size/min_thread_size >= max_threads_normal){
+    if(minefield.size/min_thread_size >= max_threads_normal){
         nthreads = max_threads_normal;
-        if (size/nthreads > max_thread_size){
-            nthreads = size/max_thread_size + 1;
+        if (minefield.size/nthreads > max_thread_size){
+            nthreads = minefield.size/max_thread_size + 1;
         }
-    }else if(size > min_thread_size) {
-        nthreads = size/min_thread_size;
+    }else if(minefield.size > min_thread_size) {
+        nthreads = minefield.size/min_thread_size;
     }
     
     info.data = std::make_unique<ThreadInfo[]>(nthreads);
@@ -125,8 +110,9 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
 
     size_t thread_offset = 0;
 
-    uint32_t bytes_perthred = size/(4*nthreads);
-    uint32_t bytes_remainder = size % (4*nthreads);
+    const size_t total_bytes = minefield.width_bytes * minefield.height_bytes;
+    const size_t bytes_perthread = total_bytes / nthreads;
+    size_t bytes_remainder = total_bytes % nthreads;
 
     uint32_t perthread_gen_amount = gen_amount/nthreads;
     uint32_t gen_remainder = gen_amount % nthreads;
@@ -145,12 +131,12 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
 
         //For the size remainder
         if(bytes_remainder){
-            parameters.section_size = (bytes_perthred + 1);
-            thread_offset += bytes_perthred + 1;
+            parameters.section_size = (bytes_perthread + 1);
+            thread_offset += bytes_perthread + 1;
             bytes_remainder--;
         }else{
-            parameters.section_size = (bytes_perthred);
-            thread_offset += bytes_perthred;
+            parameters.section_size = (bytes_perthread);
+            thread_offset += bytes_perthread;
         }
         
         //For the amount remainder
@@ -165,6 +151,7 @@ void start_generating_minefield(MineField &minefield, int density, size_t width,
         t_info.thread = std::thread(generation_worker, parameters, std::ref(t_info.remaining_place_count));
         
     }
+    //assert(thread_offset == total_bytes);
     generating_indicator = GenProgress::DONE;
 } 
 

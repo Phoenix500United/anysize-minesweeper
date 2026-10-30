@@ -10,12 +10,11 @@ layout (binding = 2) uniform sampler2D minesweeper_texture_atlas;
 
 layout (std140, binding = 0) uniform screen_data {
     mat4 projection; 
-    uint chunk_size;
-    uint cell_size;
-    vec2 camera;
+    uvec2 chunk_size;
 };
 
 layout (location = 0) uniform int mode;
+layout (location = 1) uniform uint cell_size;
 
 const float num_textures = 14.0;
 const uint unrevealed_offset = 9;

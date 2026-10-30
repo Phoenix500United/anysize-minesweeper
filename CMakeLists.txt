@@ -29,11 +29,15 @@ if(GENERATE_SHADERS)
         -is ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.vert 
         -is ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.frag 
         -is ${CMAKE_SOURCE_DIR}/shaders/minefield_proccessor_optomized.comp
+        -is ${CMAKE_SOURCE_DIR}/shaders/testing.vert
+        -is ${CMAKE_SOURCE_DIR}/shaders/testing.frag
         DEPENDS 
             ${CMAKE_SOURCE_DIR}/bytify 
             ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.vert
             ${CMAKE_SOURCE_DIR}/shaders/chunk_renderer.frag 
             ${CMAKE_SOURCE_DIR}/shaders/minefield_proccessor_optomized.comp
+            ${CMAKE_SOURCE_DIR}/shaders/testing.vert
+            ${CMAKE_SOURCE_DIR}/shaders/testing.frag
         COMMENT "Generating Shaders"
         VERBATIM
     )
@@ -54,6 +58,11 @@ target_include_directories(minesweeper PUBLIC
 target_link_libraries(minesweeper PRIVATE raylib)
 
 target_compile_options(minesweeper PRIVATE
-    $<$<CONFIG:Debug>:-Wall -Wextra -g -O0>
-    $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
+    $<$<CONFIG:Debug>:-Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG -flto>
 ) 
+
+target_link_options(minesweeper PRIVATE
+    $<$<CONFIG:Debug>: -fsanitize=address >
+    $<$<CONFIG:Release>: -flto>
+)

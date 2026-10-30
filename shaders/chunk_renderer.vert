@@ -1,14 +1,13 @@
 #version 430 core 
 
 layout (std430, binding = 1) readonly buffer render_location{
+    vec2 camera; 
     uvec2 chunk_pos[];
 };
 
 layout (std140, binding = 0) uniform screen_data {
     mat4 projection; 
-    uint chunk_size;
-    uint cell_size;
-    vec2 camera;
+    uvec2 chunk_size;
 };
 
 const vec2 vertices[6] = vec2[](
@@ -20,6 +19,8 @@ const vec2 vertices[6] = vec2[](
     vec2(0.0, 1.0),
     vec2(0.0, 0.0)
 );
+
+layout (location = 1) uniform uint cell_size;
 
 out vec2 frag_uv;
 flat out uint InstanceID;
