@@ -35,7 +35,7 @@ void main(){
     //translates verticies
     InstanceID = gl_InstanceID;
     vertex = vertex + vec2(chunk_pos[InstanceID]) * chunk_scale;
-    vertex += camera;
+    vertex += cell_size * camera ;
     
     //projects verticies
     gl_Position = projection * vec4(vertex, 0, 1);

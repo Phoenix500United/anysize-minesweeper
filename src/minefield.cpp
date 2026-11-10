@@ -85,8 +85,12 @@ void start_generating_minefield(MineField &minefield, ThreadInfoArray &info, std
     size_t gen_amount = static_cast<size_t>(static_cast<float>(minefield.size) * minefield.density);
     if (minefield.density > 0.5){
         generation_type = gt::REMOVE;
+        gen_amount = static_cast<size_t>(static_cast<float>(minefield.size) * (1.0f - minefield.density));
+        std::cout << minefield.density << std::endl;
+        std::cout << "GEN_AMOUNT: " << gen_amount << std::endl; 
     }else{
         generation_type = gt::PLACE;
+        gen_amount = static_cast<size_t>(static_cast<float>(minefield.size) * minefield.density);
     }
 
     generating_indicator = GenProgress::LOADING_THREADS;

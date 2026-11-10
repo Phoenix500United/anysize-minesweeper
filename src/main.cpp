@@ -13,6 +13,12 @@
 #include "shaders.hpp"
 #include "textures.hpp"
 
+enum ChunkRendererUniformLocations{
+    MODE = 0,
+    CELL_SIZE = 1,
+    CELL_SIZE_CUTOFF = 2,
+};
+
 
 class Timer {
 private:
@@ -35,7 +41,6 @@ public:
 struct alignas(16) StaticData {
     Mat4f projection;
     Vec2<GLuint> chunk_size;
-    uint cell_size;
 };
 
 int main()
@@ -55,15 +60,16 @@ int main()
     // std::cout << "Input a Density percentage from 0->100: ";
     // std::cin >> density;
     // std::cout << "Generating...\n";
-    height = 64;
-    width = 64;
-    density = 0.2;
+    height = 3256;
+    width = 3256;
+    density = 0.75;
 
 
     MineField mf(width, height, density);
     timer.start_timer();
     std::thread start_gen_thread(start_generating_minefield, std::ref(mf), std::ref(ti), std::ref(generation_flag));
     start_gen_thread.join();
+
 
     for (size_t i = 0; i < ti.nthreads; ++i) {
         if (ti[i].thread.joinable()) {
@@ -74,12 +80,15 @@ int main()
     
     
     std::cout << "TIME: " << timer.get_time() << "ms" << std::endl;
-
-    InitWindow(24, 24, "anysize");
+    timer.start_timer();
+    InitWindow(1000, 1000, "anysize");
+    std::cout << "WINDOW INIT: " << timer.get_time() << std::endl;
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_SCISSOR_TEST);
     SetTargetFPS(144);
+
+    timer.start_timer();
     std::cout << "COMPILING RENDERER" << std::endl;
     Shader chunk_renderer = LoadShaderFromMemory(chunk_renderer_vert, chunk_renderer_frag);
 
@@ -90,14 +99,21 @@ int main()
     GLuint temp = rlLoadShader(minefield_proccessor_optomized_comp, RL_COMPUTE_SHADER);
     GLuint minefield_proccessor = rlLoadShaderProgramCompute(temp); 
 
+    std::cout << "SHADER COMPILATION: " << timer.get_time() << std::endl;
+
     Image cpu_minesweeper_textures = LoadImageFromMemory(".png", minesweeper_textures_png, minesweeper_textures_png_size);
+    Image cpu_solid_minesweeper_textures = LoadImageFromMemory(".png", minesweeper_solid_colour_textures_png, minesweeper_solid_colour_textures_png_size);
+
     ImageFormat(&cpu_minesweeper_textures, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ImageFormat(&cpu_solid_minesweeper_textures, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
     GLuint minesweeper_textures;
+    GLuint solid_minesweeper_textures;
     
     glGenTextures(1, &minesweeper_textures);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, minesweeper_textures);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glTexImage2D(
@@ -109,11 +125,29 @@ int main()
     );
     UnloadImage(cpu_minesweeper_textures);
 
+    glGenTextures(1, &solid_minesweeper_textures);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, solid_minesweeper_textures);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA8,
+        cpu_solid_minesweeper_textures.width,
+        cpu_solid_minesweeper_textures.height,
+        0, GL_RGBA, GL_UNSIGNED_BYTE,
+        cpu_solid_minesweeper_textures.data
+    );
+    UnloadImage(cpu_solid_minesweeper_textures);
+
     RenderBuffer rb;
-    mf.initilize_chunk_interpretation(8, 8);
+    mf.initilize_chunk_interpretation(128, 128);
+
+
     GLint alignment;
     glGetIntegerv(GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT, &alignment);
     rb.construct_render_buffer(mf, alignment, GetScreenWidth(), GetScreenHeight());
+
 
     GLuint unpacked_chunks_array; 
     GLuint packed_chunks_array; 
@@ -124,6 +158,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
     glTexStorage3D(
         GL_TEXTURE_2D_ARRAY, 
         1, GL_R8UI, 
@@ -131,6 +166,8 @@ int main()
         mf.chunk_height_bytes + 2, 
         rb.screen_chunk_count
     );
+    GLenum err = glGetError();
+    std::cout << "Storage allocation: " << err << '\n';
 
     glActiveTexture(GL_TEXTURE1);
     glGenTextures(1, &unpacked_chunks_array);
@@ -140,14 +177,16 @@ int main()
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTexStorage3D(
         GL_TEXTURE_2D_ARRAY, 
         1, GL_R8UI, 
-        mf.chunk_width, 
-        mf.chunk_height, 
+        mf.chunk_width_cells, 
+        mf.chunk_height_cells, 
         rb.screen_chunk_count
     );
 
+    
     glBindImageTexture(
         0, 
         unpacked_chunks_array, 
@@ -167,8 +206,7 @@ int main()
 
     StaticData sd;
     sd.projection = transform_matrix(0, GetScreenWidth(), 0, GetScreenHeight(), -1, 1);
-    sd.chunk_size = Vec2<GLuint>({static_cast<GLuint>(mf.chunk_width), static_cast<GLuint>(mf.chunk_height)});
-    sd.cell_size = 8;
+    sd.chunk_size = Vec2<GLuint>({static_cast<GLuint>(mf.chunk_width_cells), static_cast<GLuint>(mf.chunk_height_cells)});
    
     GLuint static_data; 
     glGenBuffers(1, &static_data);
@@ -177,48 +215,22 @@ int main()
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, static_data);
 
     glUseProgram(chunk_renderer.id);
-    glUniform1i(0, 2);
-    glUniform1ui(1, 1);
+    glUniform1i(MODE, 2);
+    glUniform1ui(CELL_SIZE, 5);
+    glUniform1ui(CELL_SIZE_CUTOFF, 5);
 
-
-    std::cout << "SCREEN_CHUNK_COUNT: " << rb.screen_chunk_count << std::endl;
-    std::cout << "CHUNK_BUFFER_SIZE: " << rb.render_buffer_size - rb.render_meta_data_size << std::endl;
-    std::cout << "CHUNK_COUNT_DERIVED: " << (rb.render_buffer_size - rb.render_meta_data_size)/(66 * 66) << std::endl;
-    std::cout << "SCREEN_CHUNK_WIDTH: " << rb.screen_chunk_width << " MAP_CHUNK_WIDTH: " << mf.width_chunks << std::endl;
-    std::cout << "SCREEN_CHUNK_HEIGHT: " << rb.screen_chunk_height << " MAP_CHUNK_HEIGHT: " << mf.height_chunks << std::endl;
-    for(size_t y = 0; y < rb.screen_chunk_width; ++y){
-        for(size_t x = 0; x < rb.screen_chunk_height; ++x){
-            rb.add_chunk(mf, x, y, y * rb.screen_chunk_width + x, Vec2<uint32_t>({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}));
+    for(size_t y = 0; y < rb.screen_chunk_height; ++y){
+        for(size_t x = 0; x < rb.screen_chunk_width; ++x){
+            //std::cout << x << ", " << y << std::endl;
+            rb.add_chunk(mf, x, y, y * (rb.screen_chunk_width) + x, Vec2<uint32_t>({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}));
         }
     }
 
-    rb.camera() = Vec2f({0.0f, 0.0f});
-
+    rb.camera() = Vec2f({0.0f, -128.0f});
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, dynamic_data);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, rb.render_meta_data_size,  rb.data());
-    std::cout << "BEFORE READBACK\n";
-    for(size_t i = 0; i < rb.screen_chunk_count; ++i){
-         std::cout << rb.get_layer_buffer()[i] << ", ";
-    }
-    for(size_t i = 0; i < rb.screen_chunk_count; ++i){
-        std::cout << "[" << rb.get_chunk_locations()[i].x() << "," << rb.get_chunk_locations()[i].y() << "], ";
-    }
-    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, rb.render_meta_data_size, rb.data());
-
-    std::cout << "\nAFTER_READBACK\n";
-    for(size_t i = 0; i < rb.screen_chunk_count; ++i){
-         std::cout << rb.get_layer_buffer()[i] << ", ";
-    }
-    for(size_t i = 0; i < rb.screen_chunk_count; ++i){
-        std::cout << "[" << rb.get_chunk_locations()[i].x() << "," << rb.get_chunk_locations()[i].y() << "], ";
-    }
-    std::cout << std::endl;
-
-
-
-
     
-    glBindTexture(GL_TEXTURE_2D_ARRAY, packed_chunks_array);
+    glActiveTexture(GL_TEXTURE0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
     glTexSubImage3D(
         GL_TEXTURE_2D_ARRAY, 
@@ -230,105 +242,60 @@ int main()
         GL_RED_INTEGER, 
         GL_UNSIGNED_BYTE, 
         rb.get_chunk_buffer()
-    );
+    ); 
+    //std::unique_ptr<uint8_t[]> image = std::make_unique<uint8_t[]>((mf.chunk_width_cells) * (mf.chunk_height_cells));
 
 
-    GLint talignment, row_length, skip_pixels, skip_rows, skip_images;
-
-glGetIntegerv(GL_UNPACK_ALIGNMENT, &talignment);
-glGetIntegerv(GL_UNPACK_ROW_LENGTH, &row_length);
-glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &skip_pixels);
-glGetIntegerv(GL_UNPACK_SKIP_ROWS, &skip_rows);
-glGetIntegerv(GL_UNPACK_SKIP_IMAGES, &skip_images);
-
-std::cout << talignment << ", " << row_length << ", "
-          << skip_pixels << ", " << skip_rows << ", "
-          << skip_images << '\n';
-
-    GLenum err = glGetError();
-std::cout << "glTexSubImage3D error: " << std::hex << err << '\n';
-    GLint twidth, theight, tdepth;
-
-glGetTextureLevelParameteriv(
-    packed_chunks_array, 0, GL_TEXTURE_WIDTH, &twidth
-);
-glGetTextureLevelParameteriv(
-    packed_chunks_array, 0, GL_TEXTURE_HEIGHT, &theight
-);
-glGetTextureLevelParameteriv(
-    packed_chunks_array, 0, GL_TEXTURE_DEPTH, &tdepth
-);
-
-std::cout << twidth << ", " << theight << ", " << tdepth << '\n';
 
     GLuint dummy_vao;
     glGenVertexArrays(1, &dummy_vao);
-
-    glUseProgram(minefield_proccessor);
-    glDispatchCompute(1, 1, rb.layer_index);
-    glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT);
-    std::unique_ptr<uint8_t[]> image = std::make_unique<uint8_t[]>(mf.chunk_width * mf.chunk_height);
-    std::unique_ptr<uint8_t[]> image2 = std::make_unique<uint8_t[]>((mf.chunk_width/2 + 2) * (mf.chunk_height/2 + 2));
     
-    std::cout << "CB_PACKED: " << std::endl;
-    for(size_t y = 0; y < mf.chunk_height/2 + 2; ++y){
-        for(size_t x = 0; x < mf.chunk_width/2 + 2; ++x){
-            std::cout << static_cast<int>(rb.get_chunk_buffer()[(y * (mf.chunk_width/2 + 2) + x) + 7 * (mf.chunk_width/2 + 2) * (mf.chunk_height/2 + 2)]) << ", ";
-        }
-        std::cout << std::endl;
-    }
-    glPixelStorei(GL_PACK_ALIGNMENT, 2);
-    glGetTextureSubImage(
-        packed_chunks_array,
-        0,
-        0,0, 7,
-        mf.chunk_width/2 + 2, mf.chunk_height/2 + 2, 1,
-        GL_RED_INTEGER,
-        GL_UNSIGNED_BYTE,
-        (mf.chunk_width/2 + 2) * (mf.chunk_height/2 + 2),
-        image2.get()
-    );
+    glUseProgram(minefield_proccessor);
+    glDispatchCompute(mf.chunk_width_cells/16, mf.chunk_height_cells/16, rb.layer_index);
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 
-    std::cout << "GPU_PACKED: " << std::endl;
-    for(size_t y = 0; y < mf.chunk_height/2 + 2; ++y){
-        for(size_t x = 0; x < mf.chunk_width/2 + 2; ++x){
-            std::cout << static_cast<int>(image2[y * (mf.chunk_width/2 + 2) + x]) << ", ";
-        }
-        std::cout << std::endl;
-    }
+    // glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    // glGetTextureSubImage(
+    //     packed_chunks_array,
+    //     0,
+    //     0,0, 25,
+    //     mf.chunk_width_cells, mf.chunk_height_cells, 1,
+    //     GL_RED_INTEGER,
+    //     GL_UNSIGNED_BYTE,
+    //     (mf.chunk_width_bytes + 2) * (mf.chunk_height_bytes + 2),
+    //     image.get()
+    // );
 
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glGetTextureSubImage(
-        unpacked_chunks_array, 
-        0,
-        0, 0, 7,
-        mf.chunk_width, mf.chunk_height, 1,
-        GL_RED_INTEGER,
-        GL_UNSIGNED_BYTE,
-        mf.chunk_width * mf.chunk_height,
-        image.get()
-    );
+    // for(size_t y = 0; y < mf.chunk_height_cells; ++y){
+    //     for(size_t x = 0; x < mf.chunk_width_cells; ++x){
+    //         std::cout << static_cast<int>(image[y * mf.chunk_width_cells + x]) << ", ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
 
-    std::cout << "UNPACKED: " << std::endl;
-    for(size_t y = 0; y < mf.chunk_height; ++y){
-        for(size_t x = 0; x < mf.chunk_width; ++x){
-            std::cout << static_cast<int>(image[y * mf.chunk_width + x]) << ", ";
-        }
-        std::cout << std::endl;
-    }
-     
     while(!WindowShouldClose()){
+        rb.chunk_buffer_clear();
         BeginDrawing();
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, minesweeper_textures);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, unpacked_chunks_array);
             glBindVertexArray(dummy_vao);
-            // glUseProgram(chunk_renderer.id);
-            // glDrawArraysInstanced(GL_TRIANGLES, 0, 6, rb.layer_index);
+            glUseProgram(chunk_renderer.id);
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, rb.layer_index);
         EndDrawing();
     }
     rlUnloadShader(minefield_proccessor); 
     UnloadShader(chunk_renderer);
     UnloadShader(testing_shader);
+
+    glDeleteBuffers(1, &static_data);
+    glDeleteBuffers(1, &dynamic_data);
+    glDeleteTextures(1, &minesweeper_textures);
+    glDeleteTextures(1, &unpacked_chunks_array);
+    glDeleteTextures(1, &packed_chunks_array);
+
+    CloseWindow();
     return 0;
 }

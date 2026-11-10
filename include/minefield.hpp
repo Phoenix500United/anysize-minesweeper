@@ -41,7 +41,7 @@ struct ThreadInfoArray {
     }
 };
 
-
+//generation type
 enum class gt : bool {
     PLACE,
     REMOVE,
@@ -56,6 +56,7 @@ enum class Edge : uint8_t {
     NONE
 };
 
+//Minefield generaion flag
 enum class GenProgress : uint8_t {
     INITILIZING_MINEFIELD,
     LOADING_THREADS,
@@ -70,13 +71,13 @@ struct GenParameters{
 };
 
 
-const uint8_t reveal_value = 
+constexpr uint8_t reveal_value = 
     (to_underlying(CellFlag::Revealed) << 6) |
     (to_underlying(CellFlag::Revealed) << 4) | 
     (to_underlying(CellFlag::Revealed) << 2) |
     (to_underlying(CellFlag::Revealed));
 
-const uint8_t bombValue = 
+constexpr uint8_t bombValue = 
     (to_underlying(CellFlag::Bomb) << 6) |
     (to_underlying(CellFlag::Bomb) << 4) | 
     (to_underlying(CellFlag::Bomb) << 2) |
@@ -87,6 +88,7 @@ class MineField
     std::unique_ptr<uint8_t[]> field;
 
     public:
+    //Total cells
     size_t size;
 
     size_t width_cells;
@@ -95,32 +97,51 @@ class MineField
     size_t width_bytes;
     size_t height_bytes;
 
+    //Leftover cells 
     size_t chunk_leftovers_y;
     size_t chunk_leftovers_x;
 
-    size_t chunk_width; 
-    size_t chunk_height;
+    size_t chunk_leftovers_total; 
+
+    //Leftovers bytes
+    size_t chunk_leftovers_bytes_x;
+    size_t chunk_leftovers_bytes_y;
+
+    size_t chunk_leftovers_total_bytes;
+
+
+    size_t chunk_width_cells; 
+    size_t chunk_height_cells;
+    size_t chunk_size;
 
     size_t chunk_width_bytes;
     size_t chunk_height_bytes;
+    size_t chunk_size_bytes;
 
+    //How many chunks across the map
     size_t width_chunks; 
+    //How many chunks up the map
     size_t height_chunks;
     
+    //Generation Density 
     float density;
 
     MineField() = default;
 
     MineField(size_t w, size_t h, float _density){
-        uint8_t odd_x = w % 2;
-        uint8_t odd_y = h % 2;
+        //Checks for odd width and odd height
+        size_t odd_x = w % 2;
+        size_t odd_y = h % 2;
+
         width_bytes = w/2 + odd_x;
         height_bytes = h/2 + odd_y;
         density = _density;
-        std::cout << "DENSITY: " << density << std::endl;
+
         size = w*h;
 
         uint8_t value;
+
+        //Needs some more work
         if(density < 0.5){
             generate_empty();
             value = 0;
@@ -140,16 +161,26 @@ class MineField
 
 
     }
+    //Returns the global index to to start of a chunk
     size_t chunk_index(uint32_t chunk_x, uint32_t chunk_y){
-        return chunk_x * (chunk_height - 1 + chunk_leftovers_y) + chunk_y;
+        return chunk_y * (chunk_size + chunk_leftovers_total) + chunk_x * chunk_size;
     }
-    
+    size_t chunk_index_bytes(uint32_t chunk_x, uint32_t chunk_y){
+        //std::cout << "CHUNK_INDEX" << chunk_y * (chunk_size_bytes + chunk_leftovers_total_bytes) + chunk_x * chunk_size_bytes;
+        //std::cout << std::endl;
+        return chunk_y * (chunk_size_bytes * width_chunks + chunk_leftovers_total_bytes) + chunk_x * chunk_size_bytes;
+    }
     uint8_t* recieve_corner(uint32_t chunk_x, uint32_t chunk_y, uint32_t corner){
-        return field.get() + chunk_index(chunk_x, chunk_y) + corner;
+        // if(corner < chunk_width_bytes * 2){
+        //     std::cout << "\"TOP\" CHUNK_INDEX: " << chunk_index_bytes(chunk_x, chunk_y) << std::endl;
+        // }else{
+        //     std::cout << "\"BOTTOM\" CHUNK_INDEX: " << chunk_index_bytes(chunk_x, chunk_y) << std::endl;
+        // }
+        return field.get() + chunk_index_bytes(chunk_x, chunk_y) + corner;
     }
 
     uint8_t* recieve_edge(uint32_t chunk_x, uint32_t chunk_y, uint32_t row, uint32_t edge){
-        return field.get() + chunk_index(chunk_x, chunk_y) + row * chunk_width + edge;
+        return field.get() + chunk_index_bytes(chunk_x, chunk_y) + row * chunk_width_bytes + edge;
     }
     void propagate_odd_values_both(uint8_t value){
 
@@ -186,29 +217,38 @@ class MineField
         field = std::make_unique<uint8_t[]>(width_bytes*height_bytes);
         std::memset(field.get(), 0,  width_bytes*height_bytes);
     }
-    void initilize_chunk_interpretation(uint32_t _chunk_width, uint32_t _chunk_height){
-        chunk_width = _chunk_width;
-        chunk_height = _chunk_height;
+    void initilize_chunk_interpretation(uint32_t _chunk_width, uint32_t _chunk_height){ 
+        chunk_width_cells = _chunk_width;
+        chunk_height_cells = _chunk_height;
+        chunk_size = chunk_width_cells * chunk_height_cells;
 
-        chunk_width_bytes = chunk_width / 2; 
-        chunk_height_bytes = chunk_height / 2;
+        chunk_width_bytes = chunk_width_cells / 2; 
+        chunk_height_bytes = chunk_height_cells / 2;
+        chunk_size_bytes = chunk_width_bytes * chunk_height_bytes;
 
         width_chunks = width_bytes / chunk_width_bytes;
         height_chunks = height_bytes / chunk_height_bytes;
 
-        chunk_leftovers_x = width_bytes % chunk_width_bytes;
-        chunk_leftovers_y = height_bytes % chunk_height_bytes;
+        chunk_leftovers_x = width_cells % chunk_width_cells;
+        chunk_leftovers_y = height_cells % chunk_height_cells;
+
+        chunk_leftovers_bytes_x = width_bytes % chunk_width_bytes;
+        chunk_leftovers_bytes_y = height_bytes % chunk_height_bytes;
+
+        chunk_leftovers_total = chunk_leftovers_x * chunk_height_cells;
+        chunk_leftovers_total_bytes = chunk_leftovers_bytes_x * chunk_height_bytes;
     }
 
     uint8_t* data(size_t offset){
         return field.get() + offset;
     }
     uint8_t* recieve_chunk(uint32_t chunk_x, uint32_t chunk_y){
-        size_t offset = chunk_x * (chunk_height - 1 + chunk_leftovers_y) + chunk_y;
-        return data(offset);
+        //Returns a pointer to the first byte in a chunk
+        return data(chunk_index(chunk_x, chunk_y));
     }
-    uint8_t recieve_data(uint32_t chunk_x, uint32_t chunk_y, uint32_t internal_x, uint32_t internal_y){
-        return *(recieve_chunk(chunk_x, chunk_y) + internal_y  * chunk_width + internal_x);
+    uint8_t& recieve_data(uint32_t chunk_x, uint32_t chunk_y, uint32_t internal_byte_x, uint32_t internal_byte_y){
+        //Returns a reference to a specific byte in a specific chunk
+        return *(recieve_chunk(chunk_x, chunk_y) + internal_byte_y  * chunk_width_bytes + internal_byte_x);
     }
 
     
@@ -257,8 +297,8 @@ class RenderBuffer {
     size_t location_buffer_size;
 
     void construct_render_buffer(MineField &mf, size_t ssbo_alignment, uint32_t window_width, uint32_t window_height){
-        screen_chunk_width = (window_width / mf.chunk_width) + 2;
-        screen_chunk_height = (window_height / mf.chunk_height) + 2;
+        screen_chunk_width = (window_width / mf.chunk_width_cells) + 2;
+        screen_chunk_height = (window_height / mf.chunk_height_cells) + 2;
         screen_chunk_count = screen_chunk_width * screen_chunk_height;
         
         output_layer_buffer_size = sizeof(int) * screen_chunk_count; 
@@ -273,7 +313,7 @@ class RenderBuffer {
         BOTTOM_LEFT_CORNER = (mf.chunk_width_bytes-1) * mf.chunk_height_bytes;
         BOTTOM_RIGHT_CORNER = mf.chunk_width_bytes * mf.chunk_height_bytes -1;
 
-        RIGHT_EDGE = mf.chunk_width - 1;
+        RIGHT_EDGE = mf.chunk_width_bytes - 1;
 
         //For aligning the chunk texture buffer to 2 bytes 
         gpu_padding = (mf.chunk_width_bytes + 2) % 2;
@@ -313,13 +353,14 @@ class RenderBuffer {
 
         //Copies bottom right corner of the chunk to the upper left
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x-1, chunk_y+1, BOTTOM_RIGHT_CORNER);
-        
+        //std::cout << "TOP LEFT" << std::endl;
         //Copies the bottom row of the chunk above
         std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y+1, BOTTOM_LEFT_CORNER), mf.chunk_width_bytes);
         chunk_buffer_size += mf.chunk_width_bytes;
-    
+        //std::cout << "CENTER: " << std::endl;
         //Copies teh bottom left byte of the chunk to the upper right 
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x+1, chunk_y+1, BOTTOM_LEFT_CORNER);
+        //std::cout << "TOP RIGHT" << std::endl;
         chunk_buffer_size += gpu_padding;
 
         for(uint32_t row = 0; row < mf.chunk_height_bytes; ++row){
@@ -337,13 +378,14 @@ class RenderBuffer {
 
         //copies the top right corner of the chunk to the bottom left
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x-1, chunk_y-1, TOP_RIGHT_CORNER);
-        
+        //std::cout << "BOTTOM LEFT" << std::endl;
         //copies the top row of the chunk below
         std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y-1, TOP_LEFT_CORNER), mf.chunk_width_bytes);
         chunk_buffer_size += mf.chunk_width_bytes;
-        
+        //std::cout << "CENTER: " << std::endl;
         //copies the top left corner of the chunk ot the bottom right 
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x+1, chunk_y-1, TOP_LEFT_CORNER);
+        //std::cout << "BOTTOM RIGHT" << std::endl;
         chunk_buffer_size += gpu_padding;
     }
 
@@ -402,25 +444,25 @@ class RenderBuffer {
             chunk_buffer_size += mf.chunk_width_bytes + 2 + gpu_padding;
         }else{
             chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x-1, chunk_y+1, BOTTOM_RIGHT_CORNER);
-            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y+1, BOTTOM_LEFT_CORNER), mf.chunk_leftovers_x);
-            chunk_buffer_size += mf.chunk_leftovers_x;
-            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_x + 1);
-            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes- mf.chunk_leftovers_x + 1;
+            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y+1, BOTTOM_LEFT_CORNER), mf.chunk_leftovers_bytes_x);
+            chunk_buffer_size += mf.chunk_leftovers_bytes_x;
+            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1);
+            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes- mf.chunk_leftovers_bytes_x + 1;
         }
 
         for(uint32_t row = 0; row < mf.chunk_height_bytes; ++row){
             chunk_buffer[chunk_buffer_size++] = *mf.recieve_edge(chunk_x-1, chunk_y, row, RIGHT_EDGE);
-            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_leftovers_x);
-            chunk_buffer_size += mf.chunk_leftovers_x;
-            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_x + 1);
-            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_x + 1;
+            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_leftovers_bytes_x);
+            chunk_buffer_size += mf.chunk_leftovers_bytes_x;
+            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1);
+            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1;
         }
 
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x-1, chunk_y-1, TOP_RIGHT_CORNER);
-        std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y-1, TOP_LEFT_CORNER), mf.chunk_leftovers_x);
-        chunk_buffer_size += mf.chunk_leftovers_x;
-        std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_x + 1);
-        chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_x + 1;
+        std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y-1, TOP_LEFT_CORNER), mf.chunk_leftovers_bytes_x);
+        chunk_buffer_size += mf.chunk_leftovers_bytes_x;
+        std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1);
+        chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1;
 
     }
 
@@ -431,7 +473,7 @@ class RenderBuffer {
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x+1, chunk_y+1, BOTTOM_LEFT_CORNER);
         chunk_buffer_size += gpu_padding;
 
-        for(uint32_t row = 0; row < mf.chunk_leftovers_y; ++row){
+        for(uint32_t row = 0; row < mf.chunk_leftovers_bytes_y; ++row){
             chunk_buffer[chunk_buffer_size++] = *mf.recieve_edge(chunk_x-1, chunk_y, row, RIGHT_EDGE);
             std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_width_bytes);
             chunk_buffer_size += mf.chunk_width_bytes;
@@ -439,8 +481,8 @@ class RenderBuffer {
             chunk_buffer_size += gpu_padding;
         }
 
-        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes - mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
-        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
+        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes - mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
+        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
     }
 
     void load_render_chunk_bottom_left(MineField &mf, uint32_t chunk_x, uint32_t chunk_y){
@@ -450,7 +492,7 @@ class RenderBuffer {
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x+1, chunk_y+1, BOTTOM_LEFT_CORNER);
         chunk_buffer_size += gpu_padding;
 
-        for(uint32_t row = 0; row < mf.chunk_leftovers_y; ++row){
+        for(uint32_t row = 0; row < mf.chunk_leftovers_bytes_y; ++row){
             chunk_buffer[chunk_buffer_size++] = reveal_value;
             std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_width_bytes);
             chunk_buffer_size += mf.chunk_width_bytes;
@@ -458,31 +500,33 @@ class RenderBuffer {
             chunk_buffer_size += gpu_padding;
         }
 
-        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes-mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
-        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
+        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes-mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
+        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
         
     }
 
     void load_render_chunk_bottom_right(MineField &mf, uint32_t chunk_x, uint32_t chunk_y){
         chunk_buffer[chunk_buffer_size++] = *mf.recieve_corner(chunk_x-1, chunk_y+1, BOTTOM_RIGHT_CORNER);
-        std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y+1, BOTTOM_LEFT_CORNER), mf.chunk_leftovers_x);
-        chunk_buffer_size += mf.chunk_leftovers_x;
-        std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_x + 1);
-        chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_x + 1;
+        std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_corner(chunk_x, chunk_y+1, BOTTOM_LEFT_CORNER), mf.chunk_leftovers_bytes_x);
+        chunk_buffer_size += mf.chunk_leftovers_bytes_x;
+        std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1);
+        chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1;
 
-        for(uint32_t row = 0; row < mf.chunk_leftovers_y; ++row){
+        for(uint32_t row = 0; row < mf.chunk_leftovers_bytes_y; ++row){
             chunk_buffer[chunk_buffer_size++] = *mf.recieve_edge(chunk_x-1, chunk_y, row, RIGHT_EDGE);
-            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_leftovers_x);
-            chunk_buffer_size += mf.chunk_leftovers_x;
-            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_x + 1);
-            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_x + 1;
+            std::memcpy(chunk_buffer + chunk_buffer_size, mf.recieve_edge(chunk_x, chunk_y, row, LEFT_EDGE), mf.chunk_leftovers_bytes_x);
+            chunk_buffer_size += mf.chunk_leftovers_bytes_x;
+            std::memset(chunk_buffer + chunk_buffer_size, reveal_value, mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1);
+            chunk_buffer_size += gpu_padding + mf.chunk_width_bytes - mf.chunk_leftovers_bytes_x + 1;
         }
 
-        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes - mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
-        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
+        std::memset(chunk_buffer + chunk_buffer_size, reveal_value , (mf.chunk_height_bytes - mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding));
+        chunk_buffer_size += (mf.chunk_height_bytes - mf.chunk_leftovers_bytes_y + 1) * (mf.chunk_width_bytes + 2 + gpu_padding);
     }
 
     void add_chunk(MineField &mf, uint32_t chunk_x, uint32_t chunk_y, int location_index, Vec2<uint32_t> location){
+
+        //std::cout << "X: " << chunk_x << ", Y: " << chunk_y << " INDEX: " << mf.chunk_index_bytes(chunk_x, chunk_y) << std::endl;
 
         Edge edge_x = chunk_x == 0 ? Edge::LEFT : chunk_x == mf.width_chunks-1 ? Edge::RIGHT : Edge::NONE;
         Edge edge_y = chunk_y == 0 ? Edge::BOTTOM : chunk_y == mf.height_chunks-1 ? Edge::TOP : Edge::NONE;
